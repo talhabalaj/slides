@@ -44,6 +44,30 @@ layout: default
 </div>
 
 ---
+layout: default
+---
+
+# Agenda
+
+<v-click>
+
+- Improve app performance, security, and code quality.
+
+</v-click>
+
+<v-click>
+
+- Identify common pitfalls ("footguns") in React & Node.js.
+
+</v-click>
+
+<v-click>
+
+- Hands-on examples and better practices.
+
+</v-click>
+
+---
 layout: section
 ---
 
@@ -51,17 +75,27 @@ layout: section
 React, Node.js, and Express Fundamentals
 
 ---
-layout: two-cols
+layout: two-cols-header
 ---
 
 # React Fundamentals
 
-```jsx
-// Components & Props
+A quick refresher on core React concepts before diving into best practices.
+
+
+::left::
+<div>
+Components & Props
+
+```jsx {all|none|none}
 const Greeting = ({ name }) => {
   return <h1>Hello, {name}!</h1>;
 };
+```
 
+useState Hook
+
+```jsx {none|all|none}{at:1}
 // useState Hook
 const Counter = () => {
   const [count, setCount] = useState(0);
@@ -71,8 +105,16 @@ const Counter = () => {
     </button>
   );
 };
+```
 
-// useEffect Hook
+</div>
+
+::right::
+
+<div class="ml-4">
+useEffect Hook
+
+```jsx {none|none|all}{at:1}
 const UserProfile = ({ userId }) => {
   const [user, setUser] = useState(null);
   
@@ -83,19 +125,34 @@ const UserProfile = ({ userId }) => {
   return user ? <div>{user.name}</div> : <div>Loading...</div>;
 };
 ```
-
-::right::
+</div>
+---
+layout: default
+---
 
 # Node.js/Express Basics
 
-```javascript
+<v-switch>
+
+<template #0>
+Express is a minimal and flexible Node.js web application framework that is widely used for building web applications and APIs.
+</template>
+
+<template #1-7>
+
+> **Note**: Express is now in a **maintenance mode** and is **not actively developed**. Use Fastify, Hono, or Nest.js instead.
+</template>
+
+</v-switch>
+
+
+```javascript {all|5|7-10|12-16|17-20}{at: 3}
 const express = require('express');
 const app = express();
 
 // Middleware
 app.use(express.json());
 
-// Basic REST API
 app.get('/api/users', async (req, res) => {
   const users = await db.users.findAll();
   res.json(users);
@@ -121,20 +178,165 @@ layout: section
 Common Pitfalls and Solutions
 
 ---
+layout: default
+---
 
 # React Performance Footguns
 
-```jsx
-// ❌ Bad: New object created every render
-const BadComponent = () => {
-  return (
-    <UserCard
-      user={{ name: 'John', role: 'admin' }} // New object every time!
-      style={{ margin: '10px' }}            // New object every time!
-    />
-  );
-};
+1.  Inline Object Prop Causing Re-renders
 
+
+````md magic-move
+```jsx {all|8|3,7|8|14}{at: 1}
+// ❌ Bad: New object created every render
+function Parent() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <div>
+      <button onClick={() => setCount(count + 1)}>Count: {count}</button>
+      <ChildComponent style={{ color: "red" }} /> {/* New object every time! */}
+    </div>
+  );
+}
+
+const ChildComponent = ({ style }) => {
+  console.log("Child re-rendered!"); // Logs on every Parent re-render
+  return <div style={style}>Child</div>;
+};
+```
+```jsx {all|4}
+// ✅ Good: Memoized the inline object
+function Parent() {
+  const [count, setCount] = useState(0);
+  const memoizedStyle = useMemo(() => ({ color: "red" }), []); // Cache the object
+
+  return (
+    <div>
+      <button onClick={() => setCount(count + 1)}>Count: {count}</button>
+      <ChildComponent style={memoizedStyle} />
+    </div>
+  );
+}
+
+const ChildComponent = React.memo(({ style }) => { // Memoize the component
+  console.log("Child re-rendered!"); // Only logs once
+  return <div style={style}>Child</div>;
+});
+```
+
+````
+<v-switch at="-2">
+<template #1-2>
+
+**Why it re-renders:** 
+The style prop is a new object on every Parent render, so ChildComponent re-renders even if nothing changed.
+</template>
+
+<template #3>
+
+**Fix:** Use `useMemo` to memoize the object
+</template>
+
+</v-switch>
+
+
+---
+
+# Understanding useMemo
+
+#### What is `useMemo`?
+- **Purpose**: Memoizes expensive calculations to avoid re-computing on every render.  
+- **Syntax**:  
+  ```javascript
+  const memoizedValue = useMemo(() => computeValue(), [dependencies]);
+  ```    
+
+<div class="mt-2" />
+
+<v-click>
+
+#### Dependency Array Rules
+</v-click>
+
+<v-click>
+
+1. **No Array**: Re-computes **every render** (avoid this!).  
+   ```javascript
+   const value = useMemo(() => compute()); // ❌ Re-runs every time  
+   ```  
+</v-click>
+
+<v-click>
+
+2. **Empty Array**: Computes **once** (mounting).  
+   ```javascript
+   const value = useMemo(() => compute(), []); // ✅ Runs once  
+   ```  
+</v-click>
+
+<v-click>
+
+3. **With Dependencies**: Re-computes **only when dependencies change**.  
+   ```javascript
+   const value = useMemo(() => compute(a, b), [a, b]); // ✅ Re-runs if `a`/`b` change  
+   ```  
+</v-click>
+---
+
+#### Example: Filtering a List 
+**Problem Without `useMemo`**:  
+```javascript
+const filteredList = list.filter(item => item.includes(searchQuery)); // Recomputes on every render  
+```  
+**Fix With `useMemo`**:  
+```javascript
+const filteredList = useMemo(
+  () => list.filter(item => item.includes(searchQuery)),
+  [list, searchQuery] // ✅ Only recompute when `list` or `searchQuery` changes  
+);
+```  
+
+---
+
+#### **Common Pitfalls**  
+1. **Missing Dependencies**:  
+   ```javascript
+   const total = useMemo(() => a + b, [a]); // ❌ Missing `b` → stale value!  
+   ```  
+2. **Unnecessary Use**:  
+   ```javascript
+   const num = useMemo(() => 5, []); // ❌ Overkill for primitive values.  
+   ```  
+3. **Mutable Dependencies**:  
+   ```javascript
+   const config = { threshold: 10 };
+   const result = useMemo(() => compute(config), [config]); // ❌ New object every render → recomputes!  
+   ```  
+
+---
+
+#### **Key Takeaways**  
+- **Use When**:  
+  - Heavy computations (e.g., sorting/filtering large arrays).  
+  - Preventing child re-renders due to unchanged props.  
+- **Avoid When**:  
+  - Calculations are trivial.  
+  - Dependencies change too frequently.  
+- **Always**:  
+  - Include **all dependencies** used inside `useMemo`.  
+  - Use the **React ESLint plugin** to catch missing dependencies.  
+
+---
+
+**Visual Tip**: Highlight dependencies in green (correct) and red (incorrect) in code examples!
+
+
+
+---
+
+# Better Reac
+```
 // ❌ Bad: Unnecessary effect for derived state
 const BadCounter = () => {
   const [count, setCount] = useState(0);
@@ -147,25 +349,8 @@ const BadCounter = () => {
   return <div>{doubled}</div>;
 };
 ```
-
----
-
-# Better React Performance
-
 ```jsx
-// ✅ Good: Memoized object
-const GoodComponent = () => {
-  const user = useMemo(() => ({ 
-    name: 'John', 
-    role: 'admin' 
-  }), []);
-  
-  const style = useMemo(() => ({ 
-    margin: '10px' 
-  }), []);
-  
-  return <UserCard user={user} style={style} />;
-};
+
 
 // ✅ Good: Direct calculation for derived state
 const GoodCounter = () => {
