@@ -195,17 +195,17 @@ function Parent() {
   return (
     <div>
       <button onClick={() => setCount(count + 1)}>Count: {count}</button>
-      <ChildComponent style={{ color: "red" }} /> {/* New object every time! */}
+      <ExpensiveComponent style={{ color: "red" }} /> {/* New object every time! */}
     </div>
   );
 }
 
-const ChildComponent = ({ style }) => {
+const ExpensiveComponent = ({ style }) => {
   console.log("Child re-rendered!"); // Logs on every Parent re-render
-  return <div style={style}>Child</div>;
+  return <Chart style={style}>Child</Chart>;
 };
 ```
-```jsx {all|4}
+```jsx {all|4|14}
 // ✅ Good: Memoized the inline object
 function Parent() {
   const [count, setCount] = useState(0);
@@ -214,28 +214,28 @@ function Parent() {
   return (
     <div>
       <button onClick={() => setCount(count + 1)}>Count: {count}</button>
-      <ChildComponent style={memoizedStyle} />
+      <ExpensiveComponent style={memoizedStyle} />
     </div>
   );
 }
 
-const ChildComponent = React.memo(({ style }) => { // Memoize the component
+const ExpensiveComponent = React.memo(({ style }) => { // Memoize the component
   console.log("Child re-rendered!"); // Only logs once
-  return <div style={style}>Child</div>;
+  return <Chart style={style}>Child</Chart>;
 });
 ```
 
 ````
-<v-switch at="-2">
+<v-switch at="-3">
 <template #1-2>
 
 **Why it re-renders:** 
 The style prop is a new object on every Parent render, so ChildComponent re-renders even if nothing changed.
 </template>
 
-<template #3>
+<template #3-5>
 
-**Fix:** Use `useMemo` to memoize the object
+**Fix:** Use `useMemo` to memoize the object and use `React.memo` to memoize the component
 </template>
 
 </v-switch>
@@ -284,11 +284,33 @@ The style prop is a new object on every Parent render, so ChildComponent re-rend
 </v-click>
 ---
 
-#### Example: Filtering a List 
+# Understanding useMemo
+
+#### Another Example: Filtering a List 
+
 **Problem Without `useMemo`**:  
-```javascript
-const filteredList = list.filter(item => item.includes(searchQuery)); // Recomputes on every render  
+```javascript {all|2|3,7|8-10}
+function FilteredList({ list, searchQuery }) {
+  const filteredList = list.filter(item => item.includes(searchQuery)); // Recomputes on every render
+  const [count, setCount] = useState(0);
+
+  return (
+    <div>
+      <button onClick={() => setCount(count + 1)}>Count: {count}</button>
+      {filteredList.map(item => (
+        <div key={item}>{item}</div>
+      ))}
+    </div>
+  );
+}
 ```  
+---
+
+# Understanding useMemo
+
+#### Another Example: Filtering a List 
+
+
 **Fix With `useMemo`**:  
 ```javascript
 const filteredList = useMemo(
@@ -297,26 +319,58 @@ const filteredList = useMemo(
 );
 ```  
 
+<v-click>
+
+- No `React.memo` here because the filteredList is not used as a prop. 
+
+</v-click>
+
+<v-click>
+
+- Creating a list of div is not expensive so we don't need to memoize the component using `React.memo`.
+
+</v-click>
+
+
 ---
 
-#### **Common Pitfalls**  
+# Understanding useMemo
+
+#### Common Pitfalls
+
+<v-click>
+
 1. **Missing Dependencies**:  
    ```javascript
    const total = useMemo(() => a + b, [a]); // ❌ Missing `b` → stale value!  
    ```  
+</v-click>
+
+<v-click>
+
 2. **Unnecessary Use**:  
    ```javascript
    const num = useMemo(() => 5, []); // ❌ Overkill for primitive values.  
    ```  
+</v-click>
+
+<v-click>
+
 3. **Mutable Dependencies**:  
    ```javascript
    const config = { threshold: 10 };
    const result = useMemo(() => compute(config), [config]); // ❌ New object every render → recomputes!  
    ```  
+</v-click>
 
 ---
 
-#### **Key Takeaways**  
+# Understanding useMemo
+
+#### Key Takeaways
+
+<v-clicks depth="2">
+
 - **Use When**:  
   - Heavy computations (e.g., sorting/filtering large arrays).  
   - Preventing child re-renders due to unchanged props.  
@@ -326,17 +380,311 @@ const filteredList = useMemo(
 - **Always**:  
   - Include **all dependencies** used inside `useMemo`.  
   - Use the **React ESLint plugin** to catch missing dependencies.  
+  - **Use `React.memo` to memoize the component if the result of `useMemo` is used as a prop.**
+
+</v-clicks>
 
 ---
 
-**Visual Tip**: Highlight dependencies in green (correct) and red (incorrect) in code examples!
+# Understanding React.memo
+
+React.memo is used to optimize performance by preventing unnecessary re-renders of components. 
+
+### 1. Use React.memo When...
+
+##### a. Props Are Stable, But Parent Re-Renders Often
+
+
+```jsx {all|2|2,5|7|14}
+const Parent = () => {
+  const [counter, setCounter] = useState(0);
+  return (
+    <div>
+      <button onClick={() => setCounter(c + 1)}>Re-render Parent</button>
+      {/* Child re-renders even if `text` doesn't change! */}
+      <Child title="Static Content" /> 
+    </div>
+  );
+};
+
+
+// Fix: Memoize Child, so it doesn't re-render when the parent re-renders
+const Child = React.memo(({ title }) => <div><span>{title}</span><Chart/></div>);
+```  
 
 
 
 ---
 
-# Better Reac
+# Understanding React.memo
+
+### 1. Use React.memo When...
+
+<v-click>
+
+#### b. Heavy/Complex Components
+- Example: A component with expensive rendering logic (e.g., large tables, charts).  
+  ```jsx
+  const HeavyChart = React.memo(({ data }) => {
+    // Expensive rendering logic here...
+    return <Chart data={data} />;
+  });
+  ```  
+  **Why**: Avoids re-running heavy computations on every parent re-render.  
+
+</v-click>
+
+
+---
+
+# Understanding React.memo
+
+### 2. Avoid React.memo When...
+
+<v-click>
+
+#### a. Props Change Frequently
+  ```jsx
+  // ❌ Useless memo: `value` changes on every render
+  const Child = React.memo(({ value }) => <div>{value}</div>);
+  ```  
+  **Why**: If props change often, `React.memo's shallow comparison adds overhead with no benefit.  
+</v-click>
+
+<v-click>
+
+#### **b. Components Are Simple/Cheap to Render**  
+  ```jsx
+  // ❌ Overkill for a simple div
+  const Title = React.memo(() => <h1>Hello World</h1>);
+  ```  
+  **Why**: Memoization costs (comparison logic) outweigh re-render savings.  
+
+</v-click>
+
+
+--- 
+
+# Understanding React.memo
+
+### 2. Avoid React.memo When...
+
+<v-click>
+
+#### **c. You're Using Context or State Internally**  
+  ```jsx
+  const Child = React.memo(() => {
+    const { user } = useContext(UserContext); // Re-renders when context changes
+    return <div>{user.name}</div>;
+  });
+  ```  
+  **Why**: `React.memo` doesn't block re-renders caused by context/state changes inside the component.  
+
+</v-click>
+
+---
+
+# Understanding React.memo
+
+### Key Takeaways
+
+<v-clicks depth="2">
+
+- **Use React.memo**:  
+  - For **static** or **rarely changing** props.  
+  - For **heavy components** where re-renders are costly.  
+  - When paired with `useMemo`/`useCallback` to stabilize props.  
+- **Skip React.memo**:  
+  - For **simple components** (e.g., plain text/UI elements).  
+  - If props **change frequently** or the component uses **context/state internally**.  
+- **Test First**: Profile performance with React DevTools before adding memoization.  
+
+</v-clicks>
+
+<v-click>
+
+**Remember**:  
+`React.memo` is a **performance optimization**, not a requirement. Use it strategically, not by default! 🚀
+
+</v-click>
+
+---
+
+# React Performance Footguns
+
+2.  Inline Function Prop
+
+````md magic-move
+```jsx {all|8|3,7|8|14}{at: 1}
+// ❌ Bad: New function created every render
+function Parent() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <div>
+      <button onClick={() => setCount(count + 1)}>Count: {count}</button>
+      <ExpensiveComponent onClick={() => {}} /> {/* New function every render! */}
+    </div>
+  );
+}
+
+const ExpensiveComponent = ({ onClick }) => {
+  console.log("Child re-rendered!"); // Logs on every Parent re-render
+  return <Chart onClick={onClick}>Child</Chart>;
+};
 ```
+```jsx {all|4|14}
+// ✅ Good: Memoized the inline function
+function Parent() {
+  const [count, setCount] = useState(0);
+  const memoizedClick = useCallback(() => {}, []); // Cache the function
+
+  return (
+    <div>
+      <button onClick={() => setCount(count + 1)}>Count: {count}</button>
+      <ExpensiveComponent onClick={memoizedClick} />
+    </div>
+  );
+}
+
+const ExpensiveComponent = React.memo(({ onClick }) => {
+  console.log("Child re-rendered!"); // Logs on every Parent re-render
+  return <Chart onClick={onClick}>Child</Chart>;
+});
+```
+
+````
+<v-switch at="-3">
+<template #1-2>
+
+**Why it re-renders:** 
+The onClick function is recreated on every Parent render, triggering a re-render of ChildComponent.
+</template>
+
+<template #3-5>
+
+**Fix:** Use `useCallback` to memoize the function and `React.memo` on the expensive component.
+</template>
+
+</v-switch>
+
+---
+
+# Understanding useCallback
+
+#### What is `useCallback`?
+
+<v-click>
+
+- **Purpose**: Memoizes **function references** to prevent unnecessary re-renders in child components.  
+</v-click>
+
+<v-click>
+
+- **Analogy to `useMemo`**:  
+  - `useMemo` → Memoizes **values** (e.g., computed data).  
+  - `useCallback` → Memoizes **functions** (e.g., event handlers).  
+</v-click>
+
+<v-click>
+
+**Syntax**:  
+```javascript
+const memoizedFunction = useCallback(() => { 
+  // Do something 
+}, [dependencies]);
+```  
+</v-click>  
+
+---
+
+# Understanding useCallback
+
+#### Dependency Array Rules
+
+<v-click>
+
+1. **No Array**: Recreates the function **every render** (useless!).  
+   ```javascript
+   const handleClick = useCallback(() => {}, []); // ✅ Good  
+   const handleClick = useCallback(() => {});      // ❌ Bad (no array)  
+   ``` 
+</v-click>
+
+<v-click>
+
+2. **With Dependencies**: Recreates the function **only when dependencies change**.  
+   ```javascript
+   const handleSubmit = useCallback(() => {
+     submitForm(email, password); // Uses `email` and `password`
+   }, [email, password]); // ✅ Rebuilds when `email`/`password` change  
+   ```  
+</v-click>
+---
+
+# Understanding useCallback
+
+#### Common Pitfalls
+
+<v-click>
+
+1. **Missing Dependencies**:  
+   ```javascript
+   const handleClick = useCallback(() => {
+     console.log(count); // Uses `count` but missing from dependencies!
+   }, []); // ❌ `count` will be stale!  
+   ```  
+</v-click>  
+
+<v-click>
+
+2. **Unnecessary Use**:  
+   ```javascript
+   const staticFn = useCallback(() => {}, []); // ✅ Good (used in `React.memo` child).  
+   const staticFn = () => {};                  // ✅ No need if child isn't memoized.  
+   ```  
+</v-click>
+
+---
+
+# Understanding useCallback
+
+#### **Key Takeaways**  
+
+<v-clicks depth="2">
+
+- **Use When**:  
+  - Passing functions to **`React.memo`** child components.  
+  - Functions are dependencies in other hooks (e.g., `useEffect`).  
+- **Avoid When**:  
+  - The function isn't causing re-renders.  
+  - The function is simple and recreating it is trivial.  
+- **Always**:  
+  - Include **variables used inside the function** in the dependency array.  
+  - Pair with `React.memo` for child components to see benefits.
+
+</v-clicks>
+
+---
+
+# Visual Comparison
+
+| **useMemo**                          | **useCallback**                          |  
+|----------------------------------------|--------------------------------------------|  
+| Memoizes **values** (data, arrays)     | Memoizes **functions** (event handlers)   |  
+| `React.memo` is not necessary (unless passed as a prop)         | `React.memo` is necessary             |  
+| `const data = useMemo(() => [...], [])` | `const fn = useCallback(() => {}, [])`     |  
+
+**Remember**: Both are optimization tools—don't overuse them! 😊
+
+---
+
+# React Performance Footguns
+
+3.  Unnecessary Effect
+
+````md magic-move
+```jsx {all|3|4|5-8}
 // ❌ Bad: Unnecessary effect for derived state
 const BadCounter = () => {
   const [count, setCount] = useState(0);
@@ -350,8 +698,6 @@ const BadCounter = () => {
 };
 ```
 ```jsx
-
-
 // ✅ Good: Direct calculation for derived state
 const GoodCounter = () => {
   const [count, setCount] = useState(0);
@@ -359,28 +705,121 @@ const GoodCounter = () => {
   
   return <div>{doubled}</div>;
 };
-
-// Code Splitting Example
-const HeavyComponent = React.lazy(() => 
-  import('./HeavyComponent')
-);
-
-// List Virtualization
-import { FixedSizeList } from 'react-window';
-
-const VirtualizedList = ({ items }) => (
-  <FixedSizeList
-    height={400}
-    width={600}
-    itemCount={items.length}
-    itemSize={50}
-  >
-    {({ index, style }) => (
-      <div style={style}>{items[index]}</div>
-    )}
-  </FixedSizeList>
-);
 ```
+````
+
+---
+
+# React Performance Footguns
+
+4.  Missing Code Splitting
+
+````md magic-move
+```jsx {all|2|3,7|8|14}{at: 1}
+// ❌ Bad: Large initial bundle
+import HeavyChart from './HeavyChart';
+
+function AnalyticsPage() {
+  return (
+    <div>
+      <h1>Analytics Dashboard</h1>
+      <HeavyChart /> {/* Included in main bundle */}
+    </div>
+  );
+}
+```
+```jsx {all|4|14}
+// ✅ Good: Dynamic import with Suspense
+const HeavyChart = React.lazy(() => import('./HeavyChart'));
+
+function AnalyticsPage() {
+  return (
+    <div>
+      <h1>Analytics Dashboard</h1>
+      <React.Suspense fallback={<div>Loading chart...</div>}>
+        <HeavyChart /> {/* Separate chunk */}
+      </React.Suspense>
+    </div>
+  );
+}
+```
+````
+<v-switch at="-3">
+<template #1-2>
+
+**Why it's bad:** 
+Entire HeavyChart component is included in initial bundle, increasing load time.
+</template>
+
+<template #3-5>
+
+**Fix:** Use `React.lazy` + `Suspense` for dynamic imports. A separate chunk will be created.
+</template>
+</v-switch>
+
+---
+
+
+# React Performance Footguns
+
+4. Missing Code Splitting (Another Example)
+
+````md magic-move
+```jsx {all|2-4|6-8|10-16}
+// ❌ Bad: All routes in main bundle
+import Dashboard from './pages/Dashboard';
+import Analytics from './pages/Analytics';
+import Settings from './pages/Settings';
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/analytics" element={<Analytics />} /> {/* Large bundle */}
+      <Route path="/settings" element={<Settings />} />
+    </Routes>
+  );
+}
+```
+```jsx {all|2-4|6-8|10-16}
+// ✅ Good: Route-based code splitting
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const Analytics = React.lazy(() => import('./pages/Analytics'));
+const Settings = React.lazy(() => import('./pages/Settings'));
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/">
+        <Route element={<React.Suspense fallback={<Spinner />}>
+          <Outlet />
+        </Route>}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/analytics" element={<Analytics />} /> {/* Loaded on demand */}
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+      </Route>
+    </Routes>
+  );
+}
+```
+````
+<v-switch at="-3">
+<template #1-2>
+
+**Why it's bad:** 
+All route components are bundled together, making initial load slower even if user only needs one route.
+</template>
+
+<template #3-5>
+
+**Fix:** Use `React.lazy` for route-based code splitting. Each route becomes a separate chunk loaded only when needed.
+</template>
+</v-switch>
+
+---
+
+
 
 ---
 
